@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright (C) 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ART_LIBARTBASE_BASE_MEMFD_H_
-#define ART_LIBARTBASE_BASE_MEMFD_H_
-
-namespace art {
-
-  // Call memfd(2) if available on platform and return result.
-int memfd_create(const char* name, unsigned int flags);
-
-// Call memfd(2) if available on platform and return result. Try to give us an unlinked FD in some
-// other way if memfd fails or isn't supported.
-int memfd_create_compat(const char* name, unsigned int flags);
-
-}  // namespace art
-
-#endif  // ART_LIBARTBASE_BASE_MEMFD_H_
+public class Main {
+  public static void main(String[] args) throws Exception {
+    art.Test1963.run();
+  }
+}
