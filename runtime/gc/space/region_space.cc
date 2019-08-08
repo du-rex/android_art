@@ -1015,6 +1015,11 @@ void RegionSpace::Region::Clear(bool zero_and_release_pages) {
   thread_ = nullptr;
 }
 
+void RegionSpace::TraceHeapSize() {
+  Heap* heap = Runtime::Current()->GetHeap();
+  heap->TraceHeapSize(heap->GetBytesAllocated() + EvacBytes());
+}
+
 RegionSpace::Region* RegionSpace::AllocateRegion(bool for_evac) {
   if (!for_evac && (num_non_free_regions_ + 1) * 2 > num_regions_) {
     return nullptr;
@@ -1036,6 +1041,7 @@ RegionSpace::Region* RegionSpace::AllocateRegion(bool for_evac) {
       }
       if (for_evac) {
         ++num_evac_regions_;
+        TraceHeapSize();
         // Evac doesn't count as newly allocated.
       } else {
         r->SetNewlyAllocated();
