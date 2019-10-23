@@ -687,7 +687,32 @@ public class Main {
     }
   }
 
-  /// CHECK-START: void Main.noUnrollingNotKnownTripCount(int[], int) loop_optimization (before)
+  // Experimental PoC version of dynamic loop unrolling which makes use of Loop Versioning.
+  //
+  // The optimization inserts a check in BB1 whether the trip cound is even; in the runtime
+  // the unrolled or regular version of the loop is chosen dynamically.
+  //
+  //       Before                    After
+  //
+  //         |B|                      |B|
+  //          |                        |
+  //          v                        v
+  //         |1|                      |1|_________
+  //          |                        |          |
+  //          v                        v          v
+  //         |2|<-\                   |2|<-\     |2A|<-\
+  //         / \  /                   / \  /     /  \  /
+  //        v   v/                   |   v/      |   v/
+  //        |   |3|                  |  |3|      | |3A|
+  //        |                        | __________|
+  //        |                        ||
+  //        v                        vv
+  //       |4|                       |4|
+  //        |                         |
+  //        v                         v
+  //       |E|                       |E|
+
+  /// CHECK-START: void Main.dynamicUnrollingNotKnownTripCount(int[], int) loop_optimization (before)
   /// CHECK-DAG: <<Array:l\d+>>   ParameterValue                            loop:none
   /// CHECK-DAG: <<Limit:i\d+>>   ParameterValue                            loop:none
   /// CHECK-DAG: <<Const1:i\d+>>  IntConstant 1                             loop:none
@@ -704,17 +729,37 @@ public class Main {
   /// CHECK-NOT:                  ArrayGet
   /// CHECK-NOT:                  ArraySet
 
-  /// CHECK-START: void Main.noUnrollingNotKnownTripCount(int[], int) loop_optimization (after)
-  /// CHECK-DAG:                  Phi                                       loop:<<Loop:B\d+>> outer_loop:none
-  /// CHECK-DAG:                  If                                        loop:<<Loop>>      outer_loop:none
-  /// CHECK-DAG:                  ArrayGet                                  loop:<<Loop>>      outer_loop:none
-  /// CHECK-DAG:                  ArrayGet                                  loop:<<Loop>>      outer_loop:none
-  /// CHECK-DAG:                  ArraySet                                  loop:<<Loop>>      outer_loop:none
+  /// CHECK-START: void Main.dynamicUnrollingNotKnownTripCount(int[], int) loop_optimization (after)
+  /// CHECK-DAG: <<Array:l\d+>>   ParameterValue                             loop:none
+  /// CHECK-DAG: <<Limit:i\d+>>   ParameterValue                             loop:none
+  /// CHECK-DAG: <<Const1:i\d+>>  IntConstant 1                              loop:none
   //
-  /// CHECK-NOT:                  Phi
-  /// CHECK-NOT:                  ArrayGet
-  /// CHECK-NOT:                  ArraySet
-  private static final void noUnrollingNotKnownTripCount(int[] a, int n) {
+  //  Regular version.
+  /// CHECK-DAG: <<PhiA:i\d+>>    Phi                                        loop:<<LoopA:B\d+>> outer_loop:none
+  /// CHECK-DAG: <<CheckA:z\d+>>  GreaterThanOrEqual [<<PhiA>>,<<Limit>>]    loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG: <<IfA:v\d+>>     If [<<CheckA>>]                            loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG: <<Get0A:i\d+>>   ArrayGet [<<Array>>,<<PhiA>>]              loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG: <<IndAddA:i\d+>> Add [<<PhiA>>,<<Const1>>]                  loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG: <<Get1A:i\d+>>   ArrayGet [<<Array>>,<<IndAddA>>]           loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG: <<AddA:i\d+>>    Add [<<Get0A>>,<<Get1A>>]                  loop:<<LoopA>>      outer_loop:none
+  /// CHECK-DAG:                  ArraySet [<<Array>>,<<PhiA>>,<<AddA>>]     loop:<<LoopA>>      outer_loop:none
+  //
+  //  Unrolled version.
+  /// CHECK-DAG: <<PhiB:i\d+>>    Phi                                        loop:<<LoopB:B\d+>> outer_loop:none
+  /// CHECK-DAG: <<CheckB:z\d+>>  GreaterThanOrEqual [<<PhiB>>,<<Limit>>]    loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<IfB:v\d+>>     If [<<CheckB>>]                            loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<Get0B:i\d+>>   ArrayGet [<<Array>>,<<PhiB>>]              loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<IndAddB:i\d+>> Add [<<PhiB>>,<<Const1>>]                  loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<Get1B:i\d+>>   ArrayGet [<<Array>>,<<IndAddB>>]           loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<AddB:i\d+>>    Add [<<Get0B>>,<<Get1B>>]                  loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG:                  ArraySet [<<Array>>,<<PhiB>>,<<AddB>>]     loop:<<LoopB>>      outer_loop:none
+  //
+  /// CHECK-DAG: <<Get0C:i\d+>>   ArrayGet [<<Array>>,<<IndAddB>>]           loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<IndAddC:i\d+>> Add [<<IndAddB>>,<<Const1>>]               loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<Get1C:i\d+>>   ArrayGet [<<Array>>,<<IndAddC>>]           loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG: <<AddC:i\d+>>    Add [<<Get0C>>,<<Get1C>>]                  loop:<<LoopB>>      outer_loop:none
+  /// CHECK-DAG:                  ArraySet [<<Array>>,<<IndAddB>>,<<AddC>>]  loop:<<LoopB>>      outer_loop:none
+  private static final void dynamicUnrollingNotKnownTripCount(int[] a, int n) {
     for (int i = 0; i < n; i++) {
       a[i] += a[i + 1];
     }
@@ -979,6 +1024,16 @@ public class Main {
     }
   }
 
+  // Check that loop internal phi is properly processed when unrolling.
+  private static final void unrollingDiamond(int[] a, boolean f, int x) {
+    for (int i = 0; i < 128; i++) {
+      if (f) {
+        x = a[i + 1];
+      }
+      a[i] += x;
+    }
+  }
+
   private static void expectEquals(int expected, int result) {
     if (expected != result) {
       throw new Error("Expected: " + expected + ", found: " + result);
@@ -993,7 +1048,7 @@ public class Main {
     initMatrix(mB);
     initMatrix(mC);
 
-    int expected = 174291515;
+    int expected = 174558465;
     int found = 0;
 
     double[] doubleArray = new double[LENGTH_B];
@@ -1018,7 +1073,11 @@ public class Main {
     unrollingTwoLoopsInTheNest(a, b, RESULT_POS);
 
     noUnrollingOddTripCount(b);
-    noUnrollingNotKnownTripCount(b, 128);
+    dynamicUnrollingNotKnownTripCount(b, 128);
+    dynamicUnrollingNotKnownTripCount(b, 127);
+
+    unrollingDiamond(a, true, 128);
+    unrollingDiamond(a, false, 127);
 
     for (int i = 0; i < LENGTH; i++) {
       found += a[i];

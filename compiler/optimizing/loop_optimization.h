@@ -162,6 +162,12 @@ class HLoopOptimization : public HOptimization {
   // should be actually applied.
   bool TryFullUnrolling(LoopAnalysisInfo* analysis_info, bool generate_code = true);
 
+  // Performs dynamic loop unrolling by 2 for loops with unknown trip count:
+  //  - creates two versions of the loop, unrolls one of them.
+  //  - inserts a runtime trip count check: if it is even then the unrolled version will be
+  //    executed otherwise the original one.
+  bool TryDynamicUnrolling(LoopAnalysisInfo* analysis_info, bool generate_code = true);
+
   // Tries to apply scalar loop peeling and unrolling.
   bool TryPeelingAndUnrolling(LoopNode* node);
 
@@ -318,6 +324,10 @@ class HLoopOptimization : public HOptimization {
   // Permanent mapping used during vectorization synthesis.
   // Contents reside in phase-local heap memory.
   ScopedArenaSafeMap<HInstruction*, HInstruction*>* vector_permanent_map_;
+
+  // Set of loops (headers) which shouldn't be tried for optimizations.
+  // Used for stoping indefinite attempts to transform the same loop.
+  ScopedArenaSet<HBasicBlock*>* loop_black_list_;
 
   // Temporary vectorization bookkeeping.
   VectorMode vector_mode_;  // synthesis mode
